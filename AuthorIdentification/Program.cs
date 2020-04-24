@@ -58,20 +58,6 @@ namespace AuthorIdentification {
 			xmlFile = File.Create(Environment.CurrentDirectory + $"\\{catname}.xml");
 			writer.Serialize(xmlFile, authorProfile);
 			xmlFile.Close();
-
-
-
-
-			//file.Write(catname.Replace(" ", "") + " ");
-			//for(int i = 0; i < myList.Count; i++) {
-			//	if(i >= 300)
-			//		break;
-			//	file.Write(myList[i].Key);
-			//	file.Write(" ");
-			//}
-
-			//file.Write("\n");
-			//file.Close();
 		}
 
 
