@@ -1,4 +1,4 @@
 # AuthorIdentificationBasedOnNgrams
 ## Usage
-* To generate a new author profile run: `AuthorIdentification.exe n <file> [author]`.
-* To compare two profiles run: `AuthorIdentification.exe c <file1> <file2>`.
+* To generate a new author profile run: `AuthorIdentification.exe new <file> <author>`.
+* To identify the author of the text: `AuthorIdentification.exe id <file>`.
