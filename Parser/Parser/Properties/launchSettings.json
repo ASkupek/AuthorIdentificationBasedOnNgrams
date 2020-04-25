@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Parser": {
+      "commandName": "Project",
+      "commandLineArgs": "F0000004.xml"
+    }
+  }
+}
