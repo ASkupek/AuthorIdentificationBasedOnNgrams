@@ -53,6 +53,7 @@ namespace Parser {
 					//Console.WriteLine(line);
 					outputFile.Write(line + " ");
 				}
+				outputFile.Write("\n");
 				outputFile.Close();
 			}
 		}
