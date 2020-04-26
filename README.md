@@ -1,7 +1,7 @@
 # AuthorIdentificationBasedOnNgrams
 ## Algoritem za identifikacijo avtorja besedila 
 ### Osnoven algoritem (V. Kešelj)
-* Nov profil za avtorja: `AuthorIdentification.exe new <file> <author>`.
+* Nov profil za avtorja: `AuthorIdentification.exe new <file> <author> [nGrams] [profileLimit]`.
 * Identifikacija avtorja: `AuthorIdentification.exe id <file>`.
 
 ## Parser

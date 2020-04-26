@@ -7,13 +7,15 @@ using System.Xml.Serialization;
 
 namespace AuthorIdentification {
 	class Program {
-		const int maxNgram = 2;
-		const int minNgram = 2;
+		static int maxNgram = 5;
+		static int minNgram = 1;
+		static int profileLimit = 1500;           // Author profile contains only L most frequent ngrams
 
 		/// <summary>
 		/// Usage:
-		/// AuthorIdentification.exe new <file> <author>	Create a new profile for the given author
-		/// AuthorIdentification.exe id <file>			Finds who the author of the text is 
+		/// AuthorIdentification.exe new <file> <author> [nGrams] [profileLimit]		Create a new profile for the given author
+		/// AuthorIdentification.exe id <file>											Finds who the author of the text is 
+		/// AuthorIdentification.exe h													Prints help
 		/// </summary>
 		static int Main(string[] args) {
 			if(args[0].ToLower() == "new") {
@@ -22,21 +24,31 @@ namespace AuthorIdentification {
 					Console.WriteLine("File does not exist");
 					return 1;
 				}
-				DefineNewAuthorProfile(File.ReadAllText(args[1]), args.Length == 3 ? args[2] : null);
+
+				if(args.Length >= 4)
+					maxNgram = int.Parse(args[3]);
+
+				if(args.Length >= 5)
+					profileLimit = int.Parse(args[4]);
+
+				DefineNewAuthorProfile(File.ReadAllText(args[1]), args.Length >= 3 ? args[2] : null);
 			} else if(args[0].ToLower() == "id") {
 				// Find the author of the text
 				if(!File.Exists(args[1])) {
 					Console.WriteLine("File does not exist");
 					return 1;
 				}
-
 				if(!Directory.Exists(Environment.CurrentDirectory + $"\\Profiles")) {
 					Console.WriteLine("Folder 'Profiles' does not exist");
 					return 2;
 				}
-
-
 				FindTheAuthor(File.ReadAllText(args[1]));
+			} else if(args[0].ToLower() == "h" || (args[0].ToLower() == "help")) {
+				// User help
+				Console.Write("\nProgram usage:\n" +
+					" - new <file> <author> [nGrams] [profileLimit]\t\t(Create a new profile for the given author)\n" +
+					" - id <file>\t\t\t\t\t\t(Finds who the author of the text is)\n" +
+					" - h|help\t\t\t\t\t\t(This help)\n\n");
 			}
 
 			return 0;
@@ -44,8 +56,8 @@ namespace AuthorIdentification {
 
 
 		static void FindTheAuthor(string text) {
-			AuthorProfile textProfile = new AuthorProfile() { Ngrams = GenerateProfile(text), Author="UNKNOWN" };
-			string BestMatchAuthor= "UNKNOWN";
+			AuthorProfile textProfile = new AuthorProfile() { Ngrams = GenerateProfile(text), Author = "UNKNOWN" };
+			string BestMatchAuthor = "UNKNOWN";
 			int minDis = int.MaxValue;
 
 			// XML serialization/reading variables
@@ -59,7 +71,7 @@ namespace AuthorIdentification {
 				AuthorProfile tmp = (AuthorProfile)serializer.Deserialize(fileStream);
 
 				int dis = CompareTwoProfiles(tmp, textProfile);
-				if(dis<=minDis){
+				if(dis <= minDis) {
 					minDis = dis;
 					BestMatchAuthor = tmp.Author;
 				}
@@ -117,7 +129,7 @@ namespace AuthorIdentification {
 			XmlSerializer writer = new XmlSerializer(typeof(AuthorProfile));
 
 			// Extract only words from text
-			List<KeyValuePair<string, int>> myList = GenerateProfile(learnData);
+			List<KeyValuePair<string, int>> myList = GenerateProfile(learnData, profileLimit);
 
 			// Author's name
 			string catname;
@@ -141,7 +153,7 @@ namespace AuthorIdentification {
 		}
 
 
-		static List<KeyValuePair<string, int>> GenerateProfile(string data) {
+		static List<KeyValuePair<string, int>> GenerateProfile(string data, int limit = 0) {
 			List<string> tokens = TokenizeText(data);
 			Dictionary<string, int> table;
 
@@ -149,7 +161,7 @@ namespace AuthorIdentification {
 			foreach(string token in tokens) {
 				// Predelamo vse tokens
 				for(int N = minNgram; N <= maxNgram; N++) {
-					// Za vsak token tvorimo 1..5 N gramov
+					// Za vsak token tvorimo 1..N gramov
 					foreach(string gram in GetNgrams(token, N)) {
 						table.TryGetValue(gram, out var currentCount);
 						table[gram] = currentCount + 1;
@@ -159,6 +171,9 @@ namespace AuthorIdentification {
 
 			List<KeyValuePair<string, int>> myList = GenericKeyValuePairToMyKeyValuePair(table.ToList());
 			myList.Sort((pair1, pair2) => pair2.Freq.CompareTo(pair1.Freq));    // Sort that sh!t
+
+			if(limit > 0)
+				myList = myList.Take(limit).ToList();
 
 			return myList;
 		}
@@ -185,7 +200,7 @@ namespace AuthorIdentification {
 			int i = 0;
 			string tmp;
 
-			while(i <= input.Length - 5) {
+			while(i <= input.Length - maxNgram) {
 				tmp = input.Substring(i, N).Replace(" ", "");
 				if(tmp != "")
 					output.Add(tmp);
