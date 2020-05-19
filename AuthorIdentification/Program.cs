@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -15,6 +16,7 @@ namespace AuthorIdentification {
 		/// Usage:
 		/// AuthorIdentification.exe new <file> <author> [nGrams] [profileLimit]		Create a new profile for the given author
 		/// AuthorIdentification.exe id <file>											Finds who the author of the text is 
+		/// AuthorIdentification.exe test <corpus_folder>								... 
 		/// AuthorIdentification.exe h													Prints help
 		/// </summary>
 		static int Main(string[] args) {
@@ -32,6 +34,69 @@ namespace AuthorIdentification {
 					profileLimit = int.Parse(args[4]);
 
 				DefineNewAuthorProfile(File.ReadAllText(args[1]), args.Length >= 3 ? args[2] : null);
+			} else if(args[0].ToLower() == "test") {
+				// Check accuracy & time efficiency of program
+				StreamWriter resultsFile = new StreamWriter("results.txt", false);
+				StreamWriter timingsFile = new StreamWriter("timings.txt", false);
+				Stopwatch stopWatch;
+				//Random rnd = new Random();
+				int[] profileSizes = { 20, 50, 100, 200, 500, 1000 };
+				double[,] accuracy_sum = new double[8, profileSizes.Length];
+				double[,] timings_sum = new double[8, profileSizes.Length];
+				int testRuns = 25;
+
+				for(int i = 0; i < testRuns; i++) {
+					for(int n = 3; n <= 10; n++) {
+						for(int profile_i = 0; profile_i < profileSizes.Length; profile_i += 1) {
+							DirectoryInfo directoryProfiles = new DirectoryInfo(args[1]);
+							stopWatch = new Stopwatch();
+							int elapsedTime = 0;
+
+							maxNgram = n;
+							profileLimit = profileSizes[profile_i];
+							foreach(var file in directoryProfiles.GetFiles("*.txt")) {
+								// Create profile for every author
+								DefineNewAuthorProfile(File.ReadAllText(file.FullName), file.Name.Split('.')[0]);
+							}
+
+							int correct = 0;
+							int all = 0;
+							foreach(var file in directoryProfiles.GetFiles("*.txt")) {
+								//if(rnd.Next(0, 100) >= 5)   // 5% celotnega korpusa
+								//	continue;
+
+								all += 1;
+								string text = File.ReadAllText(file.FullName);
+								int chunkSize = 150;
+								//text = text.Substring(rnd.Next(0, text.Length - chunkSize), text.Length > chunkSize ? chunkSize : text.Length);
+								text = text.Substring(0, text.Length > chunkSize ? chunkSize : text.Length);
+								stopWatch.Start();
+								if(FindTheAuthor(text) == file.Name.Split('.')[0].ToLower())
+									correct += 1;
+								stopWatch.Stop();
+								elapsedTime += stopWatch.Elapsed.Milliseconds;
+							}
+
+							double accuracy = (double)correct / (double)all;
+							accuracy_sum[n - 3, profile_i] += accuracy;
+							timings_sum[n - 3, profile_i] += (double)elapsedTime / (double)all;
+						}
+
+					}
+				}
+
+				for(int i = 3; i <= 10; i++) {
+					for(int j = 0; j < profileSizes.Length; j += 1) {
+						timingsFile.Write(string.Format("{0:0.##}\t", (double)timings_sum[i - 3, j] / (double)testRuns));
+						resultsFile.Write(string.Format("{0:0.##}\t", (double)accuracy_sum[i - 3, j] / (double)testRuns));
+					}
+
+					resultsFile.Write("\n");
+					timingsFile.Write("\n");
+				}
+
+				resultsFile.Close();
+				timingsFile.Close();
 			} else if(args[0].ToLower() == "id") {
 				// Find the author of the text
 				if(!File.Exists(args[1])) {
@@ -55,7 +120,8 @@ namespace AuthorIdentification {
 		}
 
 
-		static void FindTheAuthor(string text) {
+
+		static string FindTheAuthor(string text) {
 			AuthorProfile textProfile = new AuthorProfile() { Ngrams = GenerateProfile(text), Author = "UNKNOWN" };
 			string BestMatchAuthor = "UNKNOWN";
 			int minDis = int.MaxValue;
@@ -75,9 +141,12 @@ namespace AuthorIdentification {
 					minDis = dis;
 					BestMatchAuthor = tmp.Author;
 				}
+
+				fileStream.Close();
 			}
 
 			Console.WriteLine(BestMatchAuthor);
+			return BestMatchAuthor;
 		}
 
 
