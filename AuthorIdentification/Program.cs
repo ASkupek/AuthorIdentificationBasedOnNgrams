@@ -16,7 +16,9 @@ namespace AuthorIdentification {
 		/// Usage:
 		/// AuthorIdentification.exe new <file> <author> [nGrams] [profileLimit]		Create a new profile for the given author
 		/// AuthorIdentification.exe id <file>											Finds who the author of the text is 
-		/// AuthorIdentification.exe test <corpus_folder>								... 
+		/// AuthorIdentification.exe test <corpus_folder>								Precision & timings 
+		/// AuthorIdentification.exe test2 <corpus_folder>								F1
+		/// AuthorIdentification.exe test3 <corpus_folder> 								Micro-Macro
 		/// AuthorIdentification.exe h													Prints help
 		/// </summary>
 		static int Main(string[] args) {
@@ -43,7 +45,7 @@ namespace AuthorIdentification {
 				int[] profileSizes = { 20, 50, 100, 200, 500, 1000 };
 				double[,] accuracy_sum = new double[8, profileSizes.Length];
 				double[,] timings_sum = new double[8, profileSizes.Length];
-				int testRuns = 25;
+				int testRuns = 2;
 
 				for(int i = 0; i < testRuns; i++) {
 					for(int n = 3; n <= 10; n++) {
@@ -62,9 +64,6 @@ namespace AuthorIdentification {
 							int correct = 0;
 							int all = 0;
 							foreach(var file in directoryProfiles.GetFiles("*.txt")) {
-								//if(rnd.Next(0, 100) >= 5)   // 5% celotnega korpusa
-								//	continue;
-
 								all += 1;
 								string text = File.ReadAllText(file.FullName);
 								int chunkSize = 150;
@@ -81,7 +80,6 @@ namespace AuthorIdentification {
 							accuracy_sum[n - 3, profile_i] += accuracy;
 							timings_sum[n - 3, profile_i] += (double)elapsedTime / (double)all;
 						}
-
 					}
 				}
 
@@ -97,6 +95,10 @@ namespace AuthorIdentification {
 
 				resultsFile.Close();
 				timingsFile.Close();
+			} else if(args[0].ToLower() == "test2") {
+				Test2(args[1]);
+			} else if(args[0].ToLower() == "test3") {
+				Test3(args[1]);
 			} else if(args[0].ToLower() == "id") {
 				// Find the author of the text
 				if(!File.Exists(args[1])) {
@@ -120,6 +122,142 @@ namespace AuthorIdentification {
 		}
 
 
+		/// <summary>
+		/// Za racunanje F1. Gledata se samo dve datoteki v "profilesFolder".
+		/// </summary>
+		static void Test2(string profilesFolder) {
+			int[] profileSizes = { 20, 50, 100, 200, 500, 1000 };
+			int testRuns = 1;
+			StreamWriter resultsFile = new StreamWriter("f1.txt", false);
+
+			for(int i = 0; i < testRuns; i++) {
+				for(int n = 3; n <= 10; n++) {
+					for(int profile_i = 0; profile_i < profileSizes.Length; profile_i += 1) {
+						DirectoryInfo directoryProfiles = new DirectoryInfo(profilesFolder);
+						var files = directoryProfiles.GetFiles("*.txt");
+
+						maxNgram = n;
+						profileLimit = profileSizes[profile_i];
+						foreach(var file in directoryProfiles.GetFiles("*.txt")) {
+							// Create profile for every author
+							DefineNewAuthorProfile(File.ReadAllText(file.FullName), file.Name.Split('.')[0]);
+						}
+
+						int correct1 = 0;
+						int correct2 = 0;
+						int chunkSize = 50;
+						for(int j = 0; j < 100; j++) {
+							string text1 = File.ReadAllText(files[0].FullName);
+							string text2 = File.ReadAllText(files[1].FullName);
+							if(j < 50) {
+								text1 = text1.Substring(j * 50, text1.Length > chunkSize ? chunkSize : text1.Length);
+								if(FindTheAuthor(text1) == files[0].Name.Split('.')[0].ToLower())
+									correct1 += 1;
+							} else {
+								text2 = text2.Substring((j - 50) * 50, text2.Length > chunkSize ? chunkSize : text2.Length);
+								if(FindTheAuthor(text2) == files[1].Name.Split('.')[0].ToLower())
+									correct2 += 1;
+							}
+						}
+
+						// F1 = 2TP / (2TP + FP + FN)
+						double F1 = 2 * ((double)correct1) / (2 * ((double)correct1) + (50 - (double)correct1) + (50 - (double)correct2));
+						resultsFile.Write(string.Format("{0:0.####}\t", F1));
+						//Console.WriteLine($"{files[0].Name.Split('.')[0].ToLower()}: {correct1}, {files[1].Name.Split('.')[0].ToLower()}: {correct2}");
+					}
+
+					resultsFile.Write("\n");
+				}
+			}
+
+			resultsFile.Close();
+		}
+
+		/// <summary>
+		/// Za racunanje Micro/Macro povprecje. Gledajo se 3 datoteke (zadnja mora bit vedno OSTALO!)
+		/// </summary>
+		static void Test3(string corpusFolder) {
+			int[] profileSizes = { 20, 50, 100, 200, 500, 1000 };
+			int testRuns = 1;
+			StreamWriter microFile = new StreamWriter("micro.txt", false);
+			StreamWriter macroFile = new StreamWriter("macro.txt", false);
+
+			for(int i = 0; i < testRuns; i++) {
+				for(int n = 3; n <= 10; n++) {
+					for(int profile_i = 0; profile_i < profileSizes.Length; profile_i += 1) {
+						DirectoryInfo directoryProfiles = new DirectoryInfo(corpusFolder);
+						var files = directoryProfiles.GetFiles("*.txt");
+						int correct1 = 0;
+						int correct2 = 0;
+						int chunkSize = 50;
+						double tp1, tp2, tn1, tn2, fn1, fn2, fp1, fp2;
+						string profiles = Environment.CurrentDirectory + "\\Profiles";
+
+						maxNgram = n;
+						profileLimit = profileSizes[profile_i];
+
+						if(Directory.Exists(profiles))
+							Directory.Delete(profiles, true);
+						DefineNewAuthorProfile(File.ReadAllText(files[0].FullName), files[0].Name.Split('.')[0]);
+						DefineNewAuthorProfile(File.ReadAllText(files[2].FullName), files[2].Name.Split('.')[0]);
+						for(int j = 0; j < 100; j++) {
+							string text1 = File.ReadAllText(files[0].FullName);
+							string text2 = File.ReadAllText(files[2].FullName);
+							if(j < 50) {
+								text1 = text1.Substring(j * 50, text1.Length > chunkSize ? chunkSize : text1.Length);
+								if(FindTheAuthor(text1) == files[0].Name.Split('.')[0].ToLower())
+									correct1 += 1;
+							} else {
+								text2 = text2.Substring((j - 50) * 50, text2.Length > chunkSize ? chunkSize : text2.Length);
+								if(FindTheAuthor(text2) == files[2].Name.Split('.')[0].ToLower())
+									correct2 += 1;
+							}
+						}
+
+						tp1 = correct1;
+						fp1 = 50 - correct1;
+						fn1 = 50 - correct2;
+						tn1 = correct2;
+						correct1 = 0;
+						correct2 = 0;
+						Directory.Delete(profiles, true);
+						DefineNewAuthorProfile(File.ReadAllText(files[1].FullName), files[1].Name.Split('.')[0]);
+						DefineNewAuthorProfile(File.ReadAllText(files[2].FullName), files[2].Name.Split('.')[0]);
+						for(int j = 0; j < 100; j++) {
+							string text1 = File.ReadAllText(files[1].FullName);
+							string text2 = File.ReadAllText(files[2].FullName);
+							if(j < 50) {
+								text1 = text1.Substring(j * 50, text1.Length > chunkSize ? chunkSize : text1.Length);
+								if(FindTheAuthor(text1) == files[1].Name.Split('.')[0].ToLower())
+									correct1 += 1;
+							} else {
+								text2 = text2.Substring((j - 50) * 50, text2.Length > chunkSize ? chunkSize : text2.Length);
+								if(FindTheAuthor(text2) == files[2].Name.Split('.')[0].ToLower())
+									correct2 += 1;
+							}
+						}
+
+						tp2 = correct1;
+						fp2 = 50 - correct1;
+						fn2 = 50 - correct2;
+						tn2 = correct2;
+
+						//double F1 = 2 * ((double)correct1) / (2 * ((double)correct1) + (double)correct2 + ((double)50 - (double)correct2));
+
+						double micro = (tp1 + tp2) / ((tp1 + tp2) + (fp1 + fp2));
+						double macro = ((tp1 / (tp1 + fp1)) + (tp2 / (tp2 + fp2))) / 2;
+						microFile.Write(string.Format("{0:0.###}\t", micro));
+						macroFile.Write(string.Format("{0:0.###}\t", macro));
+					}
+
+					microFile.Write("\n");
+					macroFile.Write("\n");
+				}
+			}
+
+			microFile.Close();
+			macroFile.Close();
+		}
 
 		static string FindTheAuthor(string text) {
 			AuthorProfile textProfile = new AuthorProfile() { Ngrams = GenerateProfile(text), Author = "UNKNOWN" };
@@ -145,7 +283,7 @@ namespace AuthorIdentification {
 				fileStream.Close();
 			}
 
-			Console.WriteLine(BestMatchAuthor);
+			//Console.WriteLine(BestMatchAuthor);
 			return BestMatchAuthor;
 		}
 
@@ -181,7 +319,8 @@ namespace AuthorIdentification {
 
 			// Calculate total dissimilarity
 			foreach(var item in allNgrams) {
-				sum += (int)Math.Floor(Math.Pow(2 * (item.f1 - item.f2) / (item.f1 + item.f2), 2));
+				//sum += (int)Math.Floor(Math.Pow(2 * (item.f1 - item.f2) / (item.f1 + item.f2), 2));
+				sum += (int)Math.Abs(2 * (item.f1 - item.f2) / (item.f1 + item.f2));
 			}
 
 			return sum;
